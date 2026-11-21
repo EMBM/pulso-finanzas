@@ -17,24 +17,22 @@ Aplicación para controlar ingresos, gastos, presupuestos, gastos fijos y analí
 - **Sincronización en PostgreSQL con una fila por usuario y políticas RLS**.
 - Importación guiada de datos locales existentes cuando se crea la primera cuenta.
 
-## 🔐 Activar acceso privado y sincronización (configuración pendiente)
+## 🔐 Acceso privado y sincronización (conexión configurada; revisar Auth URLs)
 
-La web **permanece en modo local hasta conectar tu proyecto Supabase**. Después de configurar las claves, requerirá iniciar sesión antes de mostrar tus finanzas. No se guardan contraseñas en nuestro código.
+El proyecto Supabase **pulso-finanzas** ya está conectado mediante `.env.production` con su URL y su clave pública. La tabla `finance_data`, las políticas RLS y los permisos SQL están creados. **La web solicitará acceso por correo y contraseña** al cargar esta versión publicada. No guardamos contraseñas en el código.
 
-1. Crea un proyecto gratuito en <https://supabase.com/dashboard> desde tu propia cuenta.
-2. En **SQL Editor** de Supabase, ejecuta el archivo [supabase/schema.sql](supabase/schema.sql) completo. Activa RLS y políticas por `auth.uid()`. No omitas este paso.
-3. En **Authentication → Providers → Email**, deja habilitado el acceso por correo y contraseña. Para cuentas nuevas es recomendable requerir confirmación de correo.
+1. **Ya completado:** se creó y verificó la tabla `finance_data` con RLS y políticas por `auth.uid()` en tu proyecto `pulso-finanzas`.
+2. **Ya completado:** configuré la URL y la clave pública del proyecto en `.env.production`, y el workflow compila esa configuración.
+3. En el panel de Supabase, revisa **Authentication → Providers → Email**. Debe estar habilitado el registro y acceso por correo/contraseña, idealmente con confirmación de correo.
 4. En **Authentication → URL Configuration**, fija:
    - **Site URL:** `https://embm.github.io/pulso-finanzas/`
    - **Redirect URLs:** agrega `https://embm.github.io/pulso-finanzas/` (y `http://localhost:5173/` si vas a probar en local).
-5. Copia **Project URL** y la **publishable key** de tu proyecto (API Keys). Estas credenciales son públicas por diseño, pero **jamás uses `service_role`, `secret` ni la contraseña de la base de datos en el frontend**.
-6. En este repositorio, abre **Settings → Secrets and variables → Actions → New repository secret** y crea exactamente:
-   - `VITE_SUPABASE_URL` = URL del proyecto Supabase.
-   - `VITE_SUPABASE_PUBLISHABLE_KEY` = clave pública `sb_publishable_...`.
+5. **No necesitas añadir secretos de GitHub para el frontend**: la app utiliza una clave pública de Supabase, que puede estar en el código de cliente. **Nunca publiques claves `service_role` o `secret`.**
+6. Se permite registrar un usuario con correo electrónico y contraseña; el nombre visible es opcional.
 7. Abre [GitHub Actions](https://github.com/EMBM/pulso-finanzas/actions/workflows/pages.yml), elige **Run workflow** en `main` y verifica el despliegue.
 8. Visita <https://embm.github.io/pulso-finanzas/>, pulsa **Crear una cuenta**, registra un correo y contraseña y sigue la confirmación del correo. Entonces tus datos se guardarán por cuenta.
 
-> **Aviso sobre el modo local:** mientras no existan variables de Supabase, se muestra un aviso amarillo y los datos siguen guardándose sin inicio de sesión en el navegador. No lo confundas con un acceso privado.
+> **Aviso sobre el modo local:** si abres una versión antigua o ejecutas localmente sin `.env.local`, seguirá guardando datos sin autenticación. En producción, `.env.production` activa Supabase.
 >
 > **Migración:** si tienes datos antiguos en este navegador y tu cuenta todavía no tiene datos en la nube, aparecerá una opción para importarlos o descargarlos en JSON. La copia local antigua se borra **únicamente tras una importación exitosa**. Una cuenta de Supabase que ya tenga datos no se sobrescribe automáticamente.
 >
@@ -57,7 +55,7 @@ El workflow [.github/workflows/pages.yml](.github/workflows/pages.yml) compila y
 
 <https://embm.github.io/pulso-finanzas/>
 
-La configuración de Supabase se pasa a Vite solo durante la compilación, mediante las variables indicadas. La API key que necesita un navegador es la pública; la protección real de los registros depende de Supabase Auth y las políticas RLS.
+La configuración pública de Supabase se carga desde `.env.production` durante la compilación. Solo contiene la URL del proyecto y la clave `sb_publishable_...`, no credenciales administrativas. La API key que necesita un navegador es la pública; la protección real de los registros depende de Supabase Auth y las políticas RLS.
 
 ## 💾 Copias de seguridad y privacidad
 
