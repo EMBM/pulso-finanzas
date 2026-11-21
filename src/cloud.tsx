@@ -217,7 +217,15 @@ function CloudFinance({user,blankData,readLocal,localKey,renderDashboard}: Cloud
   const onLogout=useCallback(async()=>{
     if(timer.current) clearTimeout(timer.current);
     await flush();
-    if(pending.current){setSyncStatus('error');setSyncError('No se pudieron sincronizar tus últimos cambios. Reintenta antes de cerrar sesión.');return;}
+    // Esperar la petición en curso antes de cerrar la sesión (RLS necesita su JWT).
+    while(writing.current) await new Promise<void>(resolve=>setTimeout(resolve,75));
+    if(pending.current) await flush();
+    while(writing.current) await new Promise<void>(resolve=>setTimeout(resolve,75));
+    if(pending.current){
+      setSyncStatus('error');
+      setSyncError('No se pudieron sincronizar tus últimos cambios. Reintenta antes de cerrar sesión.');
+      return;
+    }
     await client?.auth.signOut();
   },[flush]);
 
