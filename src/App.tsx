@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { CloudAccount, hasCloudConfig, type AccountInfo } from './cloud';
 import type { FormEvent } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
 import { Wallet, LayoutDashboard, ReceiptText, ChartNoAxesCombined, Target, Repeat2, Settings, Plus, Trash2, Pencil, ChevronLeft, ChevronRight, Download, Upload, Sun, Moon } from 'lucide-react';
@@ -30,7 +31,18 @@ const tabs:{id:Tab;label:string;icon:typeof Wallet}[]=[
 function download(name:string,text:string,mime:string){const url=URL.createObjectURL(new Blob([text],{type:mime}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),300);}
 const Stat=({title,value,desc}:{title:string;value:number;desc:string})=><div className="card stat"><span className="muted">{title}</span><strong>{money(value)}</strong><small className="muted">{desc}</small></div>;
 export default function App(){
- const [data,setData]=useState<Data>(load);
+ if(hasCloudConfig) return <CloudAccount blankData={initial} readLocal={load} localKey={key}
+   renderDashboard={(cloudData, onChanged, account) =>
+     <FinanceDashboard initialData={cloudData} persistData={onChanged} account={account}/>}/>;
+ return <FinanceDashboard/>;
+}
+function FinanceDashboard({initialData,persistData,account}: {
+ initialData?:Data;
+ persistData?:(d:Data)=>void;
+ account?:AccountInfo;
+}){
+ const [data,setData]=useState<Data>(()=>initialData??load());
+ const initialized=useRef(false);
  const [tab,setTab]=useState<Tab>('dashboard');
  const [month,setMonth]=useState(monthNow());
  const [query,setQuery]=useState('');
@@ -49,7 +61,11 @@ export default function App(){
  const [fixedAmount,setFixedAmount]=useState('');
  const [fixedDay,setFixedDay]=useState(1);
  const [fixedCategory,setFixedCategory]=useState('hogar');
- useEffect(()=>{localStorage.setItem(key,JSON.stringify(data))},[data]);
+ useEffect(()=>{
+   if(!initialized.current){initialized.current=true;return;}
+   if(persistData) persistData(data);
+   else localStorage.setItem(key,JSON.stringify(data));
+ },[data,persistData]);
  useEffect(()=>{document.documentElement.dataset.theme=data.dark?'dark':'light'},[data.dark]);
  const rows=useMemo(()=>data.transactions.filter(t=>t.date.startsWith(month)),[data.transactions,month]);
  const income=data.salary+rows.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
@@ -74,6 +90,17 @@ export default function App(){
  const importJSON=async(file?:File)=>{if(!file)return;try{const x=JSON.parse(await file.text()) as Data;if(!Array.isArray(x.transactions)||!Array.isArray(x.categories)||!Array.isArray(x.fixed)||!confirm('¿Reemplazar tus datos actuales con este respaldo?'))return;setData(x);alert('Respaldo importado')}catch{alert('Archivo JSON inválido')}};
  return <div className="shell"><aside className="sidebar"><div className="brand"><div className="brand-icon"><Wallet size={24}/></div><div><strong>Pulso</strong><small>Finanzas personales</small></div></div><nav>{tabs.map(x=><button key={x.id} className={tab===x.id?'nav active':'nav'} onClick={()=>setTab(x.id)}><x.icon size={19}/>{x.label}</button>)}</nav><div className="sidebar-foot">Organiza tu dinero, a tu ritmo.<br/>COP · Colombia</div></aside>
  <main className="content"><header className="top"><div><span className="eyebrow">TU DINERO, BAJO CONTROL</span><h1>{tabs.find(t=>t.id===tab)?.label}</h1></div><div className="top-actions"><button className="icon-button" aria-label="Cambiar tema" onClick={()=>setData(d=>({...d,dark:!d.dark}))}>{data.dark?<Sun size={19}/>:<Moon size={19}/>}</button><button className="primary" onClick={()=>startTx()}><Plus size={18}/> Nuevo movimiento</button></div></header>
+ {account?<div className="account-bar">
+   <div className="account-identity"><span className="account-dot">●</span><span><strong>Cuenta protegida</strong><small>{account.email}</small></span></div>
+   <div className="account-actions">
+    <span className={'sync-badge '+account.syncStatus} aria-live="polite">
+      {account.syncStatus==='sincronizado'?'✓ Sincronizado':account.syncStatus==='guardando'?'↻ Guardando...':'⚠ Error de sincronización'}
+    </span>
+    {account.syncStatus==='error'&&<span className="sync-error" title={account.syncError}>{account.syncError}</span>}
+    <button className="ghost small" onClick={()=>void account.onSyncNow()}>Sincronizar</button>
+    <button className="ghost small" onClick={()=>void account.onLogout()}>Cerrar sesión</button>
+   </div>
+ </div>:<div className="local-alert" role="status"><strong>Modo local — sin inicio de sesión.</strong> Tus datos solo están en este navegador y no están protegidos por una cuenta. Para activar acceso privado y sincronización, configura Supabase según el README.</div>}
  <section className="monthbar"><button aria-label="Mes anterior" className="icon-button" onClick={()=>setMonth(moveMonth(month,-1))}><ChevronLeft/></button><strong>{friendlyMonth(month)}</strong><button aria-label="Mes siguiente" className="icon-button" onClick={()=>setMonth(moveMonth(month,1))}><ChevronRight/></button><button className="ghost" onClick={()=>setMonth(monthNow())}>Este mes</button></section>
  {tab==='dashboard'&&<><div className="stats"><Stat title="Ingresos estimados" value={income} desc="Salario + ingresos extra"/><Stat title="Gastos registrados" value={spent} desc={rows.filter(t=>t.type==='expense').length+' movimientos'}/><Stat title="Saldo proyectado" value={balance} desc="Ingresos menos gastos"/><Stat title="Meta de ahorro" value={data.goal} desc={balance>=data.goal?'Meta cubierta con el saldo actual':'Aún por alcanzar'}/></div>
  <div className="columns"><div className="card"><div className="card-head"><h2>Tendencia de gastos</h2><button className="link" onClick={()=>setTab('analytics')}>Ver analítica</button></div><Chart data={byDate}/></div><div className="card"><h2>Distribución por categoría</h2><Donut data={groupedSpent}/></div></div><div className="card"><div className="card-head"><h2>Últimos movimientos</h2><button className="link" onClick={()=>setTab('transactions')}>Ver todos</button></div><Transactions rows={txFiltered.slice(0,6)} categoryName={categoryName} startTx={startTx} removeTx={removeTx}/></div></>}
