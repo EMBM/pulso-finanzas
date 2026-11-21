@@ -1,44 +1,70 @@
 # Pulso Finanzas 💜
 
-Aplicación de finanzas personales construida con **React 19, TypeScript, Vite y Recharts**.
+Aplicación para controlar ingresos, gastos, presupuestos, gastos fijos y analítica diaria, semanal y mensual.
 
-## Funciones
+**Stack:** React 19 · TypeScript · Vite · Recharts · Supabase Auth + PostgreSQL (opcional) · GitHub Pages.
 
-- Resumen mensual de salario, ingresos extra, gastos, saldo proyectado y objetivo de ahorro.
-- Registro de movimientos con fecha, categoría y notas; edición, eliminación, búsqueda y filtros.
-- Analítica diaria, semanal y mensual; gráfico de categorías.
-- Presupuesto por categoría con alertas de exceso.
-- Gastos fijos recurrentes que se registran una sola vez por mes.
-- Categorías personalizables y modo oscuro.
-- Copias de seguridad JSON, exportación CSV e importación de copias JSON.
-- Diseño responsive para computador y celular.
+## ✅ Funcionalidades
 
-## Ejecutar en local
+- Dashboard financiero: salario, ingresos adicionales, gastos, saldo y objetivo de ahorro.
+- Registro de movimientos: crear, editar, buscar, filtrar y eliminar.
+- Analítica diaria, semanal y mensual, con gastos por categoría.
+- Presupuestos por categoría y advertencias de exceso.
+- Gastos fijos mensuales con registro de pago no duplicado.
+- Personalización, tema oscuro y exportación/importación de datos JSON o CSV.
+- **Inicio de sesión privado** con correo electrónico como usuario y contraseña mediante Supabase Auth.
+- Registro de cuentas, confirmación por correo, cierre de sesión y recuperación de contraseña.
+- **Sincronización en PostgreSQL con una fila por usuario y políticas RLS**.
+- Importación guiada de datos locales existentes cuando se crea la primera cuenta.
 
-Requiere Node.js 22 o compatible.
+## 🔐 Activar acceso privado y sincronización (configuración pendiente)
+
+La web **permanece en modo local hasta conectar tu proyecto Supabase**. Después de configurar las claves, requerirá iniciar sesión antes de mostrar tus finanzas. No se guardan contraseñas en nuestro código.
+
+1. Crea un proyecto gratuito en <https://supabase.com/dashboard> desde tu propia cuenta.
+2. En **SQL Editor** de Supabase, ejecuta el archivo [supabase/schema.sql](supabase/schema.sql) completo. Activa RLS y políticas por `auth.uid()`. No omitas este paso.
+3. En **Authentication → Providers → Email**, deja habilitado el acceso por correo y contraseña. Para cuentas nuevas es recomendable requerir confirmación de correo.
+4. En **Authentication → URL Configuration**, fija:
+   - **Site URL:** `https://embm.github.io/pulso-finanzas/`
+   - **Redirect URLs:** agrega `https://embm.github.io/pulso-finanzas/` (y `http://localhost:5173/` si vas a probar en local).
+5. Copia **Project URL** y la **publishable key** de tu proyecto (API Keys). Estas credenciales son públicas por diseño, pero **jamás uses `service_role`, `secret` ni la contraseña de la base de datos en el frontend**.
+6. En este repositorio, abre **Settings → Secrets and variables → Actions → New repository secret** y crea exactamente:
+   - `VITE_SUPABASE_URL` = URL del proyecto Supabase.
+   - `VITE_SUPABASE_PUBLISHABLE_KEY` = clave pública `sb_publishable_...`.
+7. Abre [GitHub Actions](https://github.com/EMBM/pulso-finanzas/actions/workflows/pages.yml), elige **Run workflow** en `main` y verifica el despliegue.
+8. Visita <https://embm.github.io/pulso-finanzas/>, pulsa **Crear una cuenta**, registra un correo y contraseña y sigue la confirmación del correo. Entonces tus datos se guardarán por cuenta.
+
+> **Aviso sobre el modo local:** mientras no existan variables de Supabase, se muestra un aviso amarillo y los datos siguen guardándose sin inicio de sesión en el navegador. No lo confundas con un acceso privado.
+>
+> **Migración:** si tienes datos antiguos en este navegador y tu cuenta todavía no tiene datos en la nube, aparecerá una opción para importarlos o descargarlos en JSON. La copia local antigua se borra **únicamente tras una importación exitosa**. Una cuenta de Supabase que ya tenga datos no se sobrescribe automáticamente.
+>
+> **Ediciones simultáneas:** esta primera sincronización guarda una copia completa por cuenta, por lo que no conviene modificar datos en dos dispositivos al mismo tiempo: gana la última escritura. Guarda respaldos JSON y evita cerrar la pestaña mientras aparezca «Guardando…».
+
+## 🛠 Ejecutar localmente
+
+Necesitas Node.js 22.
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Publicar gratis con GitHub Pages
+Para usar Supabase en desarrollo, crea `.env.local` a partir de `.env.example`, usando solamente **Project URL** y la **publishable key**. No publiques el archivo `.env.local`.
 
-El archivo `.github/workflows/pages.yml` contiene el despliegue automático de la rama `main`.
+## 🚀 Publicación gratuita
 
-1. Abrir **Settings → Pages** en el repositorio.
-2. En **Build and deployment → Source**, seleccionar **GitHub Actions**.
-3. Abrir **Actions** y verificar que el flujo **Publicar Pulso Finanzas** finalice exitosamente. Si hace falta, usar **Run workflow**.
-4. Sitio esperado, una vez publicado: https://embm.github.io/pulso-finanzas/
+El workflow [.github/workflows/pages.yml](.github/workflows/pages.yml) compila y publica automáticamente la rama `main` en GitHub Pages:
 
-El archivo `vite.config.ts` usa `base: '/pulso-finanzas/'`, necesario para esta URL.
+<https://embm.github.io/pulso-finanzas/>
 
-## Almacenamiento y privacidad
+La configuración de Supabase se pasa a Vite solo durante la compilación, mediante las variables indicadas. La API key que necesita un navegador es la pública; la protección real de los registros depende de Supabase Auth y las políticas RLS.
 
-**Esta versión desplegada funciona localmente.** Los movimientos se guardan en `localStorage` del navegador y **no se sincronizan** entre dispositivos. Exporta copias JSON periódicamente para no perderlos al borrar los datos del navegador. No utiliza contraseñas ni envía gastos personales a un servidor.
+## 💾 Copias de seguridad y privacidad
 
-`supabase/schema.sql` contiene un esquema inicial de PostgreSQL con políticas RLS, y `.env.example` muestra las variables de entorno previstas. La integración completa de autenticación y sincronización con Supabase **aún no está implementada**.
+Desde **Configuración** puedes descargar un respaldo completo JSON y tus movimientos en CSV. **No se solicitan datos bancarios ni se ejecutan transferencias**. El salario configurado se toma como ingreso estimado mensual y los gastos fijos cuentan cuando se registra su pago.
 
-## Aviso
+## Siguientes mejoras sugeridas
 
-El saldo representa una estimación a partir del salario configurado y los movimientos registrados. Los gastos recurrentes cuentan en el saldo cuando se marca «Registrar pago».
+- Resolución de conflictos entre dispositivos con revisiones o tablas por movimiento.
+- Filtros por rango de fechas, estadísticas de ahorro y notificaciones de presupuesto.
+- Más personalización de categorías, metas y cuentas.
