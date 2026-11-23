@@ -8,6 +8,9 @@ Aplicación para controlar ingresos, gastos, presupuestos, gastos fijos y analí
 
 - Dashboard financiero: salario, ingresos adicionales, gastos, saldo y objetivo de ahorro.
 - Registro de movimientos: crear, editar, buscar, filtrar y eliminar.
+- **Ingresos previstos:** registra primas, bonos y pagos pendientes con concepto, fecha, importe estimado y nota.
+- Dashboard con previsiones **separadas de los ingresos recibidos** y un saldo potencial condicional.
+- **Confirmar recibido:** pide el valor real recibido, lo registra como movimiento de ingreso una sola vez y marca la previsión como recibida. No mueve dinero ni hace cargos.
 - Analítica diaria, semanal y mensual, con gastos por categoría.
 - Presupuestos por categoría y advertencias de exceso.
 - Gastos fijos mensuales con registro de pago no duplicado.
@@ -16,6 +19,16 @@ Aplicación para controlar ingresos, gastos, presupuestos, gastos fijos y analí
 - Registro de cuentas, confirmación por correo, cierre de sesión y recuperación de contraseña.
 - **Sincronización en PostgreSQL con una fila por usuario y políticas RLS**.
 - Importación guiada de datos locales existentes cuando se crea la primera cuenta.
+
+## 📅 Cómo registrar la prima y otros ingresos esperados
+
+1. Selecciona el mes al que corresponde la previsión (ejemplo: **diciembre de 2026**).
+2. Abre la pestaña **Ingresos previstos** y pulsa **Añadir previsión**.
+3. Indica el concepto, fecha estimada, valor mínimo o esperado y una nota.
+4. El importe aparece en **Pendiente por recibir** y **Saldo si se recibe todo**, pero **no altera los ingresos recibidos ni el saldo actual**.
+5. Cuando el dinero llegue, pulsa **Confirmar recibido**, escribe cuánto llegó realmente y acepta. La aplicación crea un único movimiento de ingreso real con fecha del registro; puedes verificarlo en **Movimientos**.
+
+**Compatibilidad:** los perfiles antiguos de Supabase no necesitan migración SQL; el campo opcional `plannedIncomes` se guarda en el JSON existente. Las copias JSON incluyen las previsiones. Para evitar registros duplicados, no ingreses manualmente la misma prima en Movimientos antes de confirmarla en la previsión.
 
 ## 🔐 Acceso privado y sincronización (conexión configurada; revisar Auth URLs)
 
