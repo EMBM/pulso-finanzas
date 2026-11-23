@@ -15,7 +15,7 @@ export function selectReminders(payload, today) {
     : 3;
   const reminders = [];
   for (const tx of Array.isArray(payload?.transactions) ? payload.transactions : []) {
-    if (tx?.type !== 'expense' || tx.status !== 'pending' || !Number.isFinite(Number(tx.amount)) || Number(tx.amount) <= 0) continue;
+    if (tx?.type !== 'expense' || tx.status !== 'pending' || tx.dueDateConfirmed !== true || !Number.isFinite(Number(tx.amount)) || Number(tx.amount) <= 0) continue;
     const remaining = dateDiffDays(tx.date, today);
     if (![advance, 1, 0, -1].includes(remaining)) continue;
     const name = String(tx.title || 'Pago pendiente').replace(/[\r\n]+/g, ' ').slice(0, 100);
