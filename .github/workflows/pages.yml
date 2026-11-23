@@ -27,5 +27,9 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+      # GitHub puede tardar algunos segundos en hacer visible el artefacto.
+      # Evita el error transitorio "No artifacts named github-pages".
+      - name: Esperar disponibilidad del artefacto
+        run: sleep 20
       - id: deployment
         uses: actions/deploy-pages@v4
