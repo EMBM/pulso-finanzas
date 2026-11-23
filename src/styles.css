@@ -48,3 +48,22 @@
 .forecast-received{display:flex;align-items:center;gap:5px;color:#19a27c;font-size:11px;font-weight:700;white-space:nowrap}
 @media(max-width:850px){.mobile-nav{overflow-x:auto;justify-content:flex-start;scrollbar-width:none}.mobile-nav button{flex:1 0 auto;min-width:60px}.mobile-nav::-webkit-scrollbar{display:none}}
 @media(max-width:630px){.forecast-summary{grid-template-columns:1fr}.forecast-summary>div{padding:12px}.forecast-summary strong{font-size:21px}.forecast-teaser{padding:16px}.forecast-teaser>button{width:100%}.transaction{flex-wrap:wrap}.transaction .transaction-info{min-width:130px}.transaction>.row-buttons{margin-left:auto}}
+
+
+/* Obligaciones pendientes, cuotas y avisos */
+.bill-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0 22px}
+.bill-stats>div{display:flex;flex-direction:column;gap:9px;padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--bg)}
+.bill-stats strong{font-size:clamp(20px,2vw,26px);letter-spacing:-.5px}
+.bill-amount{display:flex;align-items:flex-end;flex-direction:column;gap:6px;flex-shrink:0}
+.bill-status{font-size:10px;font-weight:700;border-radius:999px;padding:4px 9px;background:#e5f8ef;color:#18815e}
+.bill-status.pending{background:#fff3d5;color:#956109}
+.bill-status.overdue{background:#ffe5e8;color:#c5445a}
+.due-overdue{color:#ca4058;font-weight:700}
+.overdue-alert{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;border:1px solid #f4bbc5;background:#fff3f5;border-radius:12px;padding:13px 16px;color:#9c3246;font-size:13px}
+.bill-installments{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.bill-installments label{display:flex;flex-direction:column;gap:8px;min-width:0}
+.settings-grid .card>h2 svg{display:inline;vertical-align:middle;margin-right:8px}
+@media(max-width:700px){.bill-stats{grid-template-columns:1fr}.bill-stats>div{padding:11px}.bill-stats strong{font-size:22px}.transaction .bill-amount{margin-left:auto}.transaction .row-buttons{width:100%;justify-content:flex-end}.bill-installments{grid-template-columns:1fr}}
+[data-theme=dark] .bill-status.pending{background:#43371e;color:#ffcf72}
+[data-theme=dark] .bill-status.overdue,[data-theme=dark] .overdue-alert{background:#492b32;color:#ffb8c3;border-color:#75414d}
+[data-theme=dark] .bill-status.paid{background:#214639;color:#9ae7c1}
