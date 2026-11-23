@@ -1,0 +1,29 @@
+name: Avisos de vencimientos por correo
+on:
+  schedule:
+    # 7:00 AM Colombia (UTC-5), no daylight saving
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    # No intentamos enviar emails hasta que el dueño confirme que configuró el proveedor.
+    if: ${{ vars.PULSO_EMAIL_REMINDERS_ENABLED == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Validar reglas de recordatorios
+        run: node --test tests/reminders.test.mjs
+      - name: Enviar recordatorios pendientes
+        run: node scripts/send-reminders.mjs
+        env:
+          SUPABASE_URL: https://xqkbazbojarhgqcsocxk.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
