@@ -43,7 +43,8 @@ function isFinanceData(data: unknown): data is FinanceData {
 }
 function meaningful(data: FinanceData): boolean {
   return data.salary !== 0 || data.goal !== 0 || data.transactions.length > 0 ||
-    data.fixed.length > 0 || data.categories.some(c => c.budget !== 0);
+    data.fixed.length > 0 || (data.plannedIncomes?.length ?? 0) > 0 ||
+    data.categories.some(c => c.budget !== 0);
 }
 
 function AuthScreen() {
