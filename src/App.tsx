@@ -2,15 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CloudAccount, hasCloudConfig, type AccountInfo } from './cloud';
 import type { FormEvent } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
-import { Wallet, LayoutDashboard, ReceiptText, ChartNoAxesCombined, Target, Repeat2, Settings, Plus, Trash2, Pencil, ChevronLeft, ChevronRight, Download, Upload, Sun, Moon } from 'lucide-react';
+import { Wallet, LayoutDashboard, ReceiptText, ChartNoAxesCombined, Target, Repeat2, Settings, Plus, Trash2, Pencil, ChevronLeft, ChevronRight, Download, Upload, Sun, Moon, CalendarClock, CheckCircle2 } from 'lucide-react';
 
 type Kind = 'expense'|'income';
 type Transaction = {id:string;date:string;type:Kind;category:string;amount:number;title:string;note:string;recurringId?:string};
 type Category = {id:string;name:string;color:string;budget:number};
 type Fixed = {id:string;name:string;category:string;amount:number;day:number;active:boolean;start:string};
-type Data = {salary:number;goal:number;dark:boolean;categories:Category[];transactions:Transaction[];fixed:Fixed[]};
-type Tab = 'dashboard'|'transactions'|'analytics'|'budgets'|'fixed'|'settings';
-const initial:Data = {salary:0,goal:0,dark:false,transactions:[],fixed:[],categories:[
+type PlannedIncome = {id:string;title:string;amount:number;date:string;note:string;actualTransactionId?:string};
+type Data = {salary:number;goal:number;dark:boolean;categories:Category[];transactions:Transaction[];fixed:Fixed[];plannedIncomes?:PlannedIncome[]};
+type Tab = 'dashboard'|'transactions'|'planned'|'analytics'|'budgets'|'fixed'|'settings';
+const initial:Data = {salary:0,goal:0,dark:false,transactions:[],fixed:[],plannedIncomes:[],categories:[
 {id:'hogar',name:'Hogar',color:'#8b82f6',budget:0},{id:'mercado',name:'Mercado',color:'#20ad9a',budget:0},
 {id:'comida',name:'Comida',color:'#f6a249',budget:0},{id:'transporte',name:'Transporte',color:'#6ca8f4',budget:0},
 {id:'ocio',name:'Ocio',color:'#ee7eae',budget:0},{id:'salud',name:'Salud y gimnasio',color:'#63c599',budget:0},
@@ -26,6 +27,7 @@ const friendlyMonth=(m:string)=>new Intl.DateTimeFormat('es-CO',{month:'long',ye
 const load=():Data=>{try{const d=JSON.parse(localStorage.getItem(key)||'null');return d&&Array.isArray(d.transactions)&&Array.isArray(d.categories)&&Array.isArray(d.fixed)?d:initial}catch{return initial}};
 const tabs:{id:Tab;label:string;icon:typeof Wallet}[]=[
 {id:'dashboard',label:'Resumen',icon:LayoutDashboard},{id:'transactions',label:'Movimientos',icon:ReceiptText},
+{id:'planned',label:'Ingresos previstos',icon:CalendarClock},
 {id:'analytics',label:'Analítica',icon:ChartNoAxesCombined},{id:'budgets',label:'Presupuestos',icon:Target},
 {id:'fixed',label:'Gastos fijos',icon:Repeat2},{id:'settings',label:'Configuración',icon:Settings}];
 function download(name:string,text:string,mime:string){const url=URL.createObjectURL(new Blob([text],{type:mime}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),300);}
@@ -61,6 +63,12 @@ function FinanceDashboard({initialData,persistData,account}: {
  const [fixedAmount,setFixedAmount]=useState('');
  const [fixedDay,setFixedDay]=useState(1);
  const [fixedCategory,setFixedCategory]=useState('hogar');
+ const [forecastOpen,setForecastOpen]=useState(false);
+ const [forecastEdit,setForecastEdit]=useState<string|null>(null);
+ const [forecastTitle,setForecastTitle]=useState('');
+ const [forecastAmount,setForecastAmount]=useState('');
+ const [forecastDate,setForecastDate]=useState('2026-12-20');
+ const [forecastNote,setForecastNote]=useState('');
  useEffect(()=>{
    if(!initialized.current){initialized.current=true;return;}
    if(persistData) persistData(data);
@@ -71,6 +79,10 @@ function FinanceDashboard({initialData,persistData,account}: {
  const income=data.salary+rows.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
  const spent=rows.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
  const balance=income-spent;
+ const forecastMonth=(data.plannedIncomes??[]).filter(p=>p.date.slice(0,7)===month).sort((a,b)=>a.date.localeCompare(b.date));
+ const receivedForecast=(p:PlannedIncome)=>Boolean(p.actualTransactionId&&data.transactions.some(t=>t.id===p.actualTransactionId));
+ const pendingForecast=forecastMonth.filter(p=>!receivedForecast(p));
+ const pendingForecastSum=pendingForecast.reduce((sum,p)=>sum+p.amount,0);
  const grouped=data.categories.map(c=>({...c,spent:rows.filter(t=>t.type==='expense'&&t.category===c.id).reduce((a,t)=>a+t.amount,0)}));
  const groupedSpent=grouped.filter(g=>g.spent>0);
  const byDate=Array.from({length:new Date(+month.slice(0,4),+month.slice(5),0).getDate()},(_,i)=>{const d=month+'-'+String(i+1).padStart(2,'0');return {day:String(i+1),value:rows.filter(t=>t.type==='expense'&&t.date===d).reduce((s,t)=>s+t.amount,0)}});
@@ -86,6 +98,41 @@ function FinanceDashboard({initialData,persistData,account}: {
  const startFixed=(f?:Fixed)=>{setFixedEdit(f?.id||null);setFixedName(f?.name||'');setFixedAmount(f?String(f.amount):'');setFixedDay(f?.day||1);setFixedCategory(f?.category||data.categories[0]?.id||'otros');setFixedOpen(true)};
  const saveFixed=(e:FormEvent)=>{e.preventDefault();if(!fixedName.trim()||n(fixedAmount)<=0)return;const old=data.fixed.find(f=>f.id===fixedEdit);const f:Fixed={id:fixedEdit||id(),name:fixedName.trim(),amount:n(fixedAmount),day:Math.min(31,Math.max(1,Math.round(fixedDay))),category:fixedCategory,active:old?.active??true,start:old?.start||month};setData(d=>({...d,fixed:[...d.fixed.filter(x=>x.id!==fixedEdit),f]}));setFixedOpen(false)};
  const markFixed=(f:Fixed)=>{if(data.transactions.some(t=>t.recurringId===f.id&&t.date.startsWith(month)))return;const max=new Date(+month.slice(0,4),+month.slice(5),0).getDate();setData(d=>({...d,transactions:[...d.transactions,{id:id(),date:month+'-'+String(Math.min(f.day,max)).padStart(2,'0'),type:'expense',category:f.category,amount:f.amount,title:f.name,note:'Gasto fijo',recurringId:f.id}]}))};
+ const startForecast=(p?:PlannedIncome)=>{
+   setForecastEdit(p?.id??null);
+   setForecastTitle(p?.title??'');
+   setForecastAmount(p?String(p.amount):'');
+   setForecastDate(p?.date??(month===monthNow()?today():month+'-20'));
+   setForecastNote(p?.note??'');
+   setForecastOpen(true);
+ };
+ const saveForecast=(event:FormEvent)=>{
+   event.preventDefault();
+   if(!forecastTitle.trim()||n(forecastAmount)<1||!/^\\d{4}-\\d{2}-\\d{2}$/.test(forecastDate))return;
+   const current=(data.plannedIncomes??[]).find(x=>x.id===forecastEdit);
+   const planned:PlannedIncome={id:forecastEdit??id(),title:forecastTitle.trim(),amount:n(forecastAmount),date:forecastDate,note:forecastNote,...(current?.actualTransactionId?{actualTransactionId:current.actualTransactionId}:{})};
+   setData(d=>({...d,plannedIncomes:[...(d.plannedIncomes??[]).filter(x=>x.id!==forecastEdit),planned]}));
+   setForecastOpen(false);
+ };
+ const removeForecast=(idToRemove:string)=>{
+   if(!confirm('¿Eliminar esta previsión? Si ya fue recibida, el movimiento real se conservará.'))return;
+   setData(d=>({...d,plannedIncomes:(d.plannedIncomes??[]).filter(x=>x.id!==idToRemove)}));
+ };
+ const confirmForecast=(p:PlannedIncome)=>{
+   if(receivedForecast(p))return;
+   const entered=prompt('¿Cuánto dinero recibiste realmente (COP)?',String(p.amount));
+   if(entered===null)return;
+   const receivedAmount=n(entered);
+   if(receivedAmount<1){alert('Escribe un valor superior a cero.');return;}
+   if(!confirm('¿Confirmar el ingreso de '+money(receivedAmount)+'? Se registrará como movimiento REAL con fecha de hoy, no antes.'))return;
+   setData(d=>{
+     const found=(d.plannedIncomes??[]).find(x=>x.id===p.id);
+     if(!found|| (found.actualTransactionId&&d.transactions.some(t=>t.id===found.actualTransactionId)))return d;
+     const actualId=id();
+     const tx:Transaction={id:actualId,date:today(),type:'income',category:'otros',amount:receivedAmount,title:found.title,note:found.note||'Confirmación de ingreso previsto'};
+     return {...d,transactions:[...d.transactions,tx],plannedIncomes:(d.plannedIncomes??[]).map(x=>x.id===p.id?{...x,actualTransactionId:actualId}:x)};
+   });
+ };
  const csv=()=>{const escape=(s:unknown)=>{const value=String(s??'');const v=/^[=+@\-]/.test(value)?"'"+value:value;return '"'+v.replaceAll('"','""')+'"'};const lines=[['Fecha','Tipo','Descripción','Categoría','Monto COP','Nota'],...data.transactions.map(t=>[t.date,t.type==='expense'?'Gasto':'Ingreso',t.title,categoryName(t.category),t.amount,t.note])];download('pulso-movimientos.csv','\uFEFF'+lines.map(r=>r.map(escape).join(',')).join('\r\n'),'text/csv;charset=utf-8')};
  const importJSON=async(file?:File)=>{if(!file)return;try{const x=JSON.parse(await file.text()) as Data;if(!Array.isArray(x.transactions)||!Array.isArray(x.categories)||!Array.isArray(x.fixed)||!confirm('¿Reemplazar tus datos actuales con este respaldo?'))return;setData(x);alert('Respaldo importado')}catch{alert('Archivo JSON inválido')}};
  return <div className="shell"><aside className="sidebar"><div className="brand"><div className="brand-icon"><Wallet size={24}/></div><div><strong>Pulso</strong><small>Finanzas personales</small></div></div><nav>{tabs.map(x=><button key={x.id} className={tab===x.id?'nav active':'nav'} onClick={()=>setTab(x.id)}><x.icon size={19}/>{x.label}</button>)}</nav><div className="sidebar-foot">Organiza tu dinero, a tu ritmo.<br/>COP · Colombia</div></aside>
@@ -103,7 +150,33 @@ function FinanceDashboard({initialData,persistData,account}: {
  </div>:<div className="local-alert" role="status"><strong>Modo local — sin inicio de sesión.</strong> Tus datos solo están en este navegador y no están protegidos por una cuenta. Para activar acceso privado y sincronización, configura Supabase según el README.</div>}
  <section className="monthbar"><button aria-label="Mes anterior" className="icon-button" onClick={()=>setMonth(moveMonth(month,-1))}><ChevronLeft/></button><strong>{friendlyMonth(month)}</strong><button aria-label="Mes siguiente" className="icon-button" onClick={()=>setMonth(moveMonth(month,1))}><ChevronRight/></button><button className="ghost" onClick={()=>setMonth(monthNow())}>Este mes</button></section>
  {tab==='dashboard'&&<><div className="stats"><Stat title="Ingresos estimados" value={income} desc="Salario + ingresos extra"/><Stat title="Gastos registrados" value={spent} desc={rows.filter(t=>t.type==='expense').length+' movimientos'}/><Stat title="Saldo proyectado" value={balance} desc="Ingresos menos gastos"/><Stat title="Meta de ahorro" value={data.goal} desc={balance>=data.goal?'Meta cubierta con el saldo actual':'Aún por alcanzar'}/></div>
+ <div className="forecast-teaser">
+  <div><span className="muted">Ingresos previstos pendientes este mes</span><strong>{money(pendingForecastSum)}</strong><small className="muted">No incluidos en el saldo · Saldo potencial: {money(balance+pendingForecastSum)}</small></div>
+  <button className="ghost" onClick={()=>setTab('planned')}>Administrar previsiones</button>
+ </div>
  <div className="columns"><div className="card"><div className="card-head"><h2>Tendencia de gastos</h2><button className="link" onClick={()=>setTab('analytics')}>Ver analítica</button></div><Chart data={byDate}/></div><div className="card"><h2>Distribución por categoría</h2><Donut data={groupedSpent}/></div></div><div className="card"><div className="card-head"><h2>Últimos movimientos</h2><button className="link" onClick={()=>setTab('transactions')}>Ver todos</button></div><Transactions rows={txFiltered.slice(0,6)} categoryName={categoryName} startTx={startTx} removeTx={removeTx}/></div></>}
+ {tab==='planned'&&<div className="card">
+  <div className="card-head wrap"><div><h2>Ingresos previstos de {friendlyMonth(month)}</h2><p className="muted">Registra primas, bonificaciones y pagos que todavía no has recibido.</p></div>
+   <button className="primary" onClick={()=>startForecast()}><Plus size={16}/> Añadir previsión</button>
+  </div>
+  <div className="forecast-summary">
+   <div><span className="muted">Pendiente por recibir</span><strong>{money(pendingForecastSum)}</strong></div>
+   <div><span className="muted">Saldo actual estimado</span><strong>{money(balance)}</strong></div>
+   <div><span className="muted">Saldo si se recibe todo</span><strong>{money(balance+pendingForecastSum)}</strong></div>
+  </div>
+  <p className="forecast-note">Los ingresos pendientes <strong>no se suman a tu saldo</strong> ni a tus ingresos registrados. Solo se incorporan cuando confirmas que recibiste el dinero.</p>
+  {forecastMonth.length===0?<p className="empty">Aún no tienes ingresos previstos en este mes.</p>:
+   <div className="list">{forecastMonth.map(p=>{const received=receivedForecast(p);return <div className="transaction" key={p.id}>
+     <div className="avatar"><CalendarClock size={19}/></div>
+     <div className="transaction-info"><strong>{p.title}</strong><small>{p.date} · {received?'Recibido y registrado':'Pendiente'}{p.note?' · '+p.note:''}</small></div>
+     <strong>{money(p.amount)}</strong>
+     <div className="row-buttons">
+       {received?<span className="forecast-received"><CheckCircle2 size={15}/> Recibido</span>:<button className="ghost small" onClick={()=>confirmForecast(p)}>Confirmar recibido</button>}
+       <button className="icon-button" aria-label={'Editar '+p.title} onClick={()=>startForecast(p)}><Pencil size={15}/></button>
+       <button className="icon-button" aria-label={'Eliminar '+p.title} onClick={()=>removeForecast(p.id)}><Trash2 size={15}/></button>
+     </div>
+   </div>})}</div>}
+ </div>}
  {tab==='transactions'&&<div className="card"><div className="card-head wrap"><h2>Movimientos del mes</h2><div className="filters"><input placeholder="Buscar movimientos..." aria-label="Buscar" value={query} onChange={e=>setQuery(e.target.value)}/><select value={filter} aria-label="Filtrar tipo" onChange={e=>setFilter(e.target.value as 'all'|Kind)}><option value="all">Todos</option><option value="expense">Gastos</option><option value="income">Ingresos</option></select><button className="ghost" onClick={csv}><Download size={16}/> CSV</button></div></div><Transactions rows={txFiltered} categoryName={categoryName} startTx={startTx} removeTx={removeTx}/></div>}
  {tab==='analytics'&&<><div className="stats"><Stat title="Ingresos" value={income} desc="Este periodo"/><Stat title="Gastos" value={spent} desc="Este periodo"/><Stat title="Balance" value={balance} desc="Disponible estimado"/></div><div className="columns"><div className="card"><div className="card-head wrap"><h2>Evolución de tus gastos</h2><div className="segmented">{([['daily','Días'],['weekly','Semanas'],['monthly','Meses']] as const).map(([p,label])=><button key={p} className={period===p?'selected':''} onClick={()=>setPeriod(p)}>{label}</button>)}</div></div><Chart data={chartData}/></div><div className="card"><h2>Por categoría</h2><Donut data={groupedSpent}/></div></div><div className="card"><h2>Detalle de categorías</h2>{grouped.map(g=><div className="budget-row" key={g.id}><div className="budget-top"><strong><i className="dot" style={{background:g.color}}/>{g.name}</strong><span>{money(g.spent)}</span></div><div className="track"><div style={{width:spent?Math.min(100,g.spent/spent*100)+'%':'0%',background:g.color}}/></div></div>)}</div></>}
  {tab==='budgets'&&<div className="card"><div className="card-head"><h2>Presupuestos personalizados</h2><span className="muted">Edita el límite mensual de cada categoría</span></div>{grouped.map(g=><div className="budget-row" key={g.id}><div className="budget-top"><strong><i className="dot" style={{background:g.color}}/>{g.name}</strong><span>{money(g.spent)} / {money(g.budget)}</span></div><div className="budget-bottom"><div className="track"><div style={{width:g.budget?Math.min(100,g.spent/g.budget*100)+'%':'0%',background:g.budget>0&&g.spent>g.budget?'#e76b82':g.color}}/></div><label>Límite COP <input type="number" min="0" value={g.budget} onChange={e=>setData(d=>({...d,categories:d.categories.map(c=>c.id===g.id?{...c,budget:n(e.target.value)}:c)}))}/></label></div>{g.budget>0&&g.spent>g.budget&&<small className="danger">Presupuesto superado en {money(g.spent-g.budget)}</small>}</div>)}<button className="ghost" onClick={()=>{const name=prompt('Nombre de la nueva categoría');if(name?.trim())setData(d=>({...d,categories:[...d.categories,{id:id(),name:name.trim().slice(0,40),color:'#8b82f6',budget:0}]}))}}><Plus size={16}/> Nueva categoría</button></div>}
@@ -111,6 +184,18 @@ function FinanceDashboard({initialData,persistData,account}: {
  {tab==='settings'&&<div className="columns settings-grid"><div className="card"><h2>Ingresos y ahorro</h2><label className="field">Salario mensual (COP)<input type="number" min="0" value={data.salary} onChange={e=>setData(d=>({...d,salary:n(e.target.value)}))}/></label><label className="field">Meta de ahorro mensual (COP)<input type="number" min="0" value={data.goal} onChange={e=>setData(d=>({...d,goal:n(e.target.value)}))}/></label><p className="muted">Tu salario se usa como ingreso estimado cada mes. Los ingresos adicionales se registran como movimientos.</p></div><div className="card"><h2>Respaldo y privacidad</h2><p className="muted">Esta versión guarda tus datos en este navegador. No cambies de dispositivo sin exportar un respaldo.</p><div className="stack"><button className="ghost" onClick={()=>download('pulso-respaldo.json',JSON.stringify(data,null,2),'application/json')}><Download size={17}/> Exportar JSON</button><button className="ghost" onClick={csv}><Download size={17}/> Exportar CSV</button><label className="ghost upload"><Upload size={17}/> Importar JSON<input type="file" accept=".json,application/json" onChange={e=>{void importJSON(e.target.files?.[0]);e.target.value=''}}/></label></div></div><div className="card"><h2>Personalización</h2><label className="toggle"><input type="checkbox" checked={data.dark} onChange={e=>setData(d=>({...d,dark:e.target.checked}))}/> Modo oscuro</label><p className="muted">Moneda: peso colombiano (COP).</p></div></div>}
  </main><div className="mobile-nav">{tabs.map(t=><button aria-label={t.label} className={tab===t.id?'active':''} key={t.id} onClick={()=>setTab(t.id)}><t.icon size={19}/><span>{t.label}</span></button>)}</div>
  {modal&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setModal(false)}}><div className="dialog"><div className="card-head"><h2>{edit?'Editar movimiento':'Nuevo movimiento'}</h2><button className="icon-button" onClick={()=>setModal(false)}>✕</button></div><form onSubmit={saveTx} className="form"><div className="segmented"><button type="button" className={kind==='expense'?'selected':''} onClick={()=>setKind('expense')}>Gasto</button><button type="button" className={kind==='income'?'selected':''} onClick={()=>setKind('income')}>Ingreso extra</button></div><label>Descripción<input required maxLength={120} value={title} onChange={e=>setTitle(e.target.value)} placeholder="Ej. Mercado, almuerzo..."/></label><label>Valor COP<input required type="number" min="1" value={amount} onChange={e=>setAmount(e.target.value)}/></label><label>Fecha<input required type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label>Categoría<select value={category} onChange={e=>setCategory(e.target.value)}>{data.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Nota (opcional)<input maxLength={500} value={note} onChange={e=>setNote(e.target.value)}/></label><div className="form-actions"><button className="ghost" type="button" onClick={()=>setModal(false)}>Cancelar</button><button className="primary" type="submit">Guardar movimiento</button></div></form></div></div>}
+ {forecastOpen&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setForecastOpen(false)}}>
+  <div className="dialog"><div className="card-head"><h2>{forecastEdit?'Editar ingreso previsto':'Nuevo ingreso previsto'}</h2><button className="icon-button" onClick={()=>setForecastOpen(false)}>✕</button></div>
+   <form className="form" onSubmit={saveForecast}>
+    <label>Concepto<input required maxLength={120} value={forecastTitle} onChange={e=>setForecastTitle(e.target.value)} placeholder="Ej. Prima de diciembre"/></label>
+    <label>Valor esperado o mínimo (COP)<input required type="number" min="1" value={forecastAmount} onChange={e=>setForecastAmount(e.target.value)}/></label>
+    <label>Fecha estimada<input required type="date" value={forecastDate} onChange={e=>setForecastDate(e.target.value)}/></label>
+    <label>Nota (opcional)<input maxLength={250} value={forecastNote} onChange={e=>setForecastNote(e.target.value)}/></label>
+    <p className="muted">Este dinero todavía no cuenta como ingreso recibido. Podrás registrar el importe real cuando lo recibas.</p>
+    <div className="form-actions"><button className="ghost" type="button" onClick={()=>setForecastOpen(false)}>Cancelar</button><button className="primary" type="submit">Guardar previsión</button></div>
+   </form>
+  </div>
+ </div>}
  {fixedOpen&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setFixedOpen(false)}}><div className="dialog"><div className="card-head"><h2>{fixedEdit?'Editar gasto fijo':'Nuevo gasto fijo'}</h2><button className="icon-button" onClick={()=>setFixedOpen(false)}>✕</button></div><form className="form" onSubmit={saveFixed}><label>Descripción<input required value={fixedName} maxLength={120} onChange={e=>setFixedName(e.target.value)}/></label><label>Monto COP<input type="number" required min="1" value={fixedAmount} onChange={e=>setFixedAmount(e.target.value)}/></label><label>Día del mes<input type="number" min="1" max="31" value={fixedDay} onChange={e=>setFixedDay(Number(e.target.value))}/></label><label>Categoría<select value={fixedCategory} onChange={e=>setFixedCategory(e.target.value)}>{data.categories.map(c=><option value={c.id} key={c.id}>{c.name}</option>)}</select></label><div className="form-actions"><button type="button" className="ghost" onClick={()=>setFixedOpen(false)}>Cancelar</button><button type="submit" className="primary">Guardar</button></div></form></div></div>}
  </div>
 }
