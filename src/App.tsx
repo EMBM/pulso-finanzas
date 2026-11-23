@@ -1,17 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CloudAccount, hasCloudConfig, type AccountInfo } from './cloud';
+import { actualDate, daysToDue, dueDescription, isPaid, isPending, type PaymentStatus } from './payments';
 import type { FormEvent } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
-import { Wallet, LayoutDashboard, ReceiptText, ChartNoAxesCombined, Target, Repeat2, Settings, Plus, Trash2, Pencil, ChevronLeft, ChevronRight, Download, Upload, Sun, Moon, CalendarClock, CheckCircle2 } from 'lucide-react';
+import { Wallet, LayoutDashboard, ReceiptText, ChartNoAxesCombined, Target, Repeat2, Settings, Plus, Trash2, Pencil, ChevronLeft, ChevronRight, Download, Upload, Sun, Moon, CalendarClock, CheckCircle2, Bell, Clock3 } from 'lucide-react';
 
 type Kind = 'expense'|'income';
-type Transaction = {id:string;date:string;type:Kind;category:string;amount:number;title:string;note:string;recurringId?:string};
+type Transaction = {
+ id:string;date:string;type:Kind;category:string;amount:number;title:string;note:string;
+ recurringId?:string;status?:PaymentStatus;paidAt?:string;
+ installmentNumber?:number;installmentsTotal?:number;remindDaysBefore?:number;
+};
 type Category = {id:string;name:string;color:string;budget:number};
 type Fixed = {id:string;name:string;category:string;amount:number;day:number;active:boolean;start:string};
 type PlannedIncome = {id:string;title:string;amount:number;date:string;note:string;actualTransactionId?:string};
-type Data = {salary:number;goal:number;dark:boolean;categories:Category[];transactions:Transaction[];fixed:Fixed[];plannedIncomes?:PlannedIncome[]};
+type Data = {
+ salary:number;goal:number;dark:boolean;categories:Category[];transactions:Transaction[];fixed:Fixed[];
+ plannedIncomes?:PlannedIncome[];
+ reminderSettings?:{emailEnabled:boolean;daysBefore:number};
+};
 type Tab = 'dashboard'|'transactions'|'planned'|'analytics'|'budgets'|'fixed'|'settings';
-const initial:Data = {salary:0,goal:0,dark:false,transactions:[],fixed:[],plannedIncomes:[],categories:[
+const initial:Data = {salary:0,goal:0,dark:false,transactions:[],fixed:[],plannedIncomes:[],reminderSettings:{emailEnabled:false,daysBefore:3},categories:[
 {id:'hogar',name:'Hogar',color:'#8b82f6',budget:0},{id:'mercado',name:'Mercado',color:'#20ad9a',budget:0},
 {id:'comida',name:'Comida',color:'#f6a249',budget:0},{id:'transporte',name:'Transporte',color:'#6ca8f4',budget:0},
 {id:'ocio',name:'Ocio',color:'#ee7eae',budget:0},{id:'salud',name:'Salud y gimnasio',color:'#63c599',budget:0},
@@ -57,6 +66,10 @@ function FinanceDashboard({initialData,persistData,account}: {
  const [date,setDate]=useState(today());
  const [category,setCategory]=useState('hogar');
  const [note,setNote]=useState('');
+ const [txStatus,setTxStatus]=useState<PaymentStatus>('pending');
+ const [txInstallmentNumber,setTxInstallmentNumber]=useState('1');
+ const [txInstallmentsTotal,setTxInstallmentsTotal]=useState('');
+
  const [fixedEdit,setFixedEdit]=useState<string|null>(null);
  const [fixedOpen,setFixedOpen]=useState(false);
  const [fixedName,setFixedName]=useState('');
@@ -76,28 +89,71 @@ function FinanceDashboard({initialData,persistData,account}: {
  },[data,persistData]);
  useEffect(()=>{document.documentElement.dataset.theme=data.dark?'dark':'light'},[data.dark]);
  const rows=useMemo(()=>data.transactions.filter(t=>t.date.startsWith(month)),[data.transactions,month]);
- const income=data.salary+rows.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
- const spent=rows.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+ const paidRows=useMemo(()=>data.transactions.filter(t=>isPaid(t)&&actualDate(t).startsWith(month)),[data.transactions,month]);
+ const income=data.salary+paidRows.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+ const spent=paidRows.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+ const pending=rows.filter(t=>t.type==='expense'&&isPending(t)).reduce((s,t)=>s+t.amount,0);
+ const outstandingCount=rows.filter(t=>t.type==='expense'&&isPending(t)).length;
  const balance=income-spent;
+ const balanceAfterBills=balance-pending;
  const forecastMonth=(data.plannedIncomes??[]).filter(p=>p.date.slice(0,7)===month).sort((a,b)=>a.date.localeCompare(b.date));
  const receivedForecast=(p:PlannedIncome)=>Boolean(p.actualTransactionId&&data.transactions.some(t=>t.id===p.actualTransactionId));
  const pendingForecast=forecastMonth.filter(p=>!receivedForecast(p));
  const pendingForecastSum=pendingForecast.reduce((sum,p)=>sum+p.amount,0);
- const grouped=data.categories.map(c=>({...c,spent:rows.filter(t=>t.type==='expense'&&t.category===c.id).reduce((a,t)=>a+t.amount,0)}));
+ const grouped=data.categories.map(c=>({...c,spent:paidRows.filter(t=>t.type==='expense'&&t.category===c.id).reduce((a,t)=>a+t.amount,0)}));
  const groupedSpent=grouped.filter(g=>g.spent>0);
- const byDate=Array.from({length:new Date(+month.slice(0,4),+month.slice(5),0).getDate()},(_,i)=>{const d=month+'-'+String(i+1).padStart(2,'0');return {day:String(i+1),value:rows.filter(t=>t.type==='expense'&&t.date===d).reduce((s,t)=>s+t.amount,0)}});
+ const byDate=Array.from({length:new Date(+month.slice(0,4),+month.slice(5),0).getDate()},(_,i)=>{const d=month+'-'+String(i+1).padStart(2,'0');return {day:String(i+1),value:paidRows.filter(t=>t.type==='expense'&&actualDate(t)===d).reduce((s,t)=>s+t.amount,0)}});
  const weekly=Array.from({length:5},(_,i)=>({day:'S'+(i+1),value:byDate.slice(i*7,i*7+7).reduce((s,r)=>s+r.value,0)}));
- const yearly=Array.from({length:12},(_,i)=>{const mo=moveMonth(month,i-11);return {day:mo.slice(2),value:data.transactions.filter(t=>t.type==='expense'&&t.date.startsWith(mo)).reduce((s,t)=>s+t.amount,0)}});
+ const yearly=Array.from({length:12},(_,i)=>{const mo=moveMonth(month,i-11);return {day:mo.slice(2),value:data.transactions.filter(t=>t.type==='expense'&&isPaid(t)&&actualDate(t).startsWith(mo)).reduce((s,t)=>s+t.amount,0)}});
  const [period,setPeriod]=useState<'daily'|'weekly'|'monthly'>('daily');
  const chartData=period==='daily'?byDate:period==='weekly'?weekly:yearly;
  const txFiltered=rows.filter(t=>(filter==='all'||t.type===filter)&&(t.title+' '+t.note).toLowerCase().includes(query.toLowerCase())).sort((a,b)=>b.date.localeCompare(a.date));
  const categoryName=(c:string)=>data.categories.find(x=>x.id===c)?.name||'Otros';
- const startTx=(t?:Transaction)=>{setEdit(t?.id||null);setKind(t?.type||'expense');setTitle(t?.title||'');setAmount(t?String(t.amount):'');setDate(t?.date|| (month===monthNow()?today():month+'-01'));setCategory(t?.category||data.categories[0]?.id||'otros');setNote(t?.note||'');setModal(true)};
- const saveTx=(e:FormEvent)=>{e.preventDefault();if(!title.trim()||n(amount)<=0)return;const previous=data.transactions.find(t=>t.id===edit);const t:Transaction={id:edit||id(),title:title.trim(),amount:n(amount),date,type:kind,category,note, ...(previous?.recurringId?{recurringId:previous.recurringId}:{})};setData(d=>({...d,transactions:[...d.transactions.filter(x=>x.id!==edit),t]}));setModal(false)};
+ const startTx=(t?:Transaction)=>{
+  setEdit(t?.id||null);setKind(t?.type||'expense');setTitle(t?.title||'');setAmount(t?String(t.amount):'');
+  setDate(t?.date|| (month===monthNow()?today():month+'-01'));
+  setCategory(t?.category||data.categories[0]?.id||'otros');setNote(t?.note||'');
+  setTxStatus(t?(isPending(t)?'pending':'paid'):'pending');
+  setTxInstallmentNumber(String(t?.installmentNumber||1));setTxInstallmentsTotal(t?.installmentsTotal?String(t.installmentsTotal):'');
+  setModal(true);
+ };
+ const saveTx=(e:FormEvent)=>{
+  e.preventDefault();if(!title.trim()||n(amount)<=0)return;
+  const previous=data.transactions.find(t=>t.id===edit);
+  const status:PaymentStatus=kind==='income'?'paid':txStatus;
+  const total=txInstallmentsTotal?n(txInstallmentsTotal):0;
+  const current=total?Math.max(1,n(txInstallmentNumber)):0;
+  if(total>120||current>total){alert('El número de cuota debe estar entre 1 y el total (máximo 120).');return;}
+  const t:Transaction={
+    id:edit||id(),title:title.trim(),amount:n(amount),date,type:kind,category,note,status,
+    ...(status==='paid'?{paidAt:previous?.paidAt||today()}:{ }),
+    ...(previous?.recurringId?{recurringId:previous.recurringId}:{}),
+    ...(total?{installmentNumber:current,installmentsTotal:total}:{}),
+  };
+  setData(d=>({...d,transactions:[...d.transactions.filter(x=>x.id!==edit),t]}));setModal(false);
+ };
+ const markPaid=(txid:string)=>{
+  const found=data.transactions.find(t=>t.id===txid);
+  if(!found||isPaid(found))return;
+  if(!confirm('¿Confirmas que YA PAGASTE '+money(found.amount)+' por '+found.title+'?'))return;
+  setData(d=>({...d,transactions:d.transactions.map(t=>t.id===txid?{...t,status:'paid',paidAt:today()}:t)}));
+ };
+ const markPending=(txid:string)=>{
+  if(!confirm('¿Volver a dejar este movimiento como pendiente?'))return;
+  setData(d=>({...d,transactions:d.transactions.map(t=>t.id===txid?{...t,status:'pending',paidAt:undefined}:t)}));
+ };
  const removeTx=(txid:string)=>{if(confirm('¿Eliminar este movimiento?'))setData(d=>({...d,transactions:d.transactions.filter(t=>t.id!==txid)}))};
  const startFixed=(f?:Fixed)=>{setFixedEdit(f?.id||null);setFixedName(f?.name||'');setFixedAmount(f?String(f.amount):'');setFixedDay(f?.day||1);setFixedCategory(f?.category||data.categories[0]?.id||'otros');setFixedOpen(true)};
  const saveFixed=(e:FormEvent)=>{e.preventDefault();if(!fixedName.trim()||n(fixedAmount)<=0)return;const old=data.fixed.find(f=>f.id===fixedEdit);const f:Fixed={id:fixedEdit||id(),name:fixedName.trim(),amount:n(fixedAmount),day:Math.min(31,Math.max(1,Math.round(fixedDay))),category:fixedCategory,active:old?.active??true,start:old?.start||month};setData(d=>({...d,fixed:[...d.fixed.filter(x=>x.id!==fixedEdit),f]}));setFixedOpen(false)};
- const markFixed=(f:Fixed)=>{if(data.transactions.some(t=>t.recurringId===f.id&&t.date.startsWith(month)))return;const max=new Date(+month.slice(0,4),+month.slice(5),0).getDate();setData(d=>({...d,transactions:[...d.transactions,{id:id(),date:month+'-'+String(Math.min(f.day,max)).padStart(2,'0'),type:'expense',category:f.category,amount:f.amount,title:f.name,note:'Gasto fijo',recurringId:f.id}]}))};
+ const markFixed=(f:Fixed)=>{
+  if(data.transactions.some(t=>t.recurringId===f.id&&t.date.startsWith(month)))return;
+  const max=new Date(+month.slice(0,4),+month.slice(5),0).getDate();
+  setData(d=>({...d,transactions:[...d.transactions,{
+    id:id(),date:month+'-'+String(Math.min(f.day,max)).padStart(2,'0'),
+    type:'expense',category:f.category,amount:f.amount,title:f.name,note:'Gasto fijo',
+    recurringId:f.id,status:'pending'
+  }]}));
+};
  const startForecast=(p?:PlannedIncome)=>{
    setForecastEdit(p?.id??null);
    setForecastTitle(p?.title??'');
@@ -129,11 +185,11 @@ function FinanceDashboard({initialData,persistData,account}: {
      const found=(d.plannedIncomes??[]).find(x=>x.id===p.id);
      if(!found|| (found.actualTransactionId&&d.transactions.some(t=>t.id===found.actualTransactionId)))return d;
      const actualId=id();
-     const tx:Transaction={id:actualId,date:today(),type:'income',category:'otros',amount:receivedAmount,title:found.title,note:found.note||'Confirmación de ingreso previsto'};
+     const tx:Transaction={id:actualId,date:today(),paidAt:today(),status:'paid',type:'income',category:'otros',amount:receivedAmount,title:found.title,note:found.note||'Confirmación de ingreso previsto'};
      return {...d,transactions:[...d.transactions,tx],plannedIncomes:(d.plannedIncomes??[]).map(x=>x.id===p.id?{...x,actualTransactionId:actualId}:x)};
    });
  };
- const csv=()=>{const escape=(s:unknown)=>{const value=String(s??'');const v=/^[=+@\-]/.test(value)?"'"+value:value;return '"'+v.replaceAll('"','""')+'"'};const lines=[['Fecha','Tipo','Descripción','Categoría','Monto COP','Nota'],...data.transactions.map(t=>[t.date,t.type==='expense'?'Gasto':'Ingreso',t.title,categoryName(t.category),t.amount,t.note])];download('pulso-movimientos.csv','\uFEFF'+lines.map(r=>r.map(escape).join(',')).join('\r\n'),'text/csv;charset=utf-8')};
+ const csv=()=>{const escape=(s:unknown)=>{const value=String(s??'');const v=/^[=+@\-]/.test(value)?"'"+value:value;return '"'+v.replaceAll('"','""')+'"'};const lines=[['Fecha prevista','Tipo','Descripción','Categoría','Monto COP','Nota','Estado','Fecha de pago','Cuota actual','Total cuotas'],...data.transactions.map(t=>[t.date,t.type==='expense'?'Gasto':'Ingreso',t.title,categoryName(t.category),t.amount,t.note,isPending(t)?'Pendiente':'Pagado',isPending(t)?'':actualDate(t),t.installmentNumber??'',t.installmentsTotal??''])];download('pulso-movimientos.csv','\uFEFF'+lines.map(r=>r.map(escape).join(',')).join('\r\n'),'text/csv;charset=utf-8')};
  const importJSON=async(file?:File)=>{if(!file)return;try{const x=JSON.parse(await file.text()) as Data;if(!Array.isArray(x.transactions)||!Array.isArray(x.categories)||!Array.isArray(x.fixed)||!confirm('¿Reemplazar tus datos actuales con este respaldo?'))return;setData(x);alert('Respaldo importado')}catch{alert('Archivo JSON inválido')}};
  return <div className="shell"><aside className="sidebar"><div className="brand"><div className="brand-icon"><Wallet size={24}/></div><div><strong>Pulso</strong><small>Finanzas personales</small></div></div><nav>{tabs.map(x=><button key={x.id} className={tab===x.id?'nav active':'nav'} onClick={()=>setTab(x.id)}><x.icon size={19}/>{x.label}</button>)}</nav><div className="sidebar-foot">Organiza tu dinero, a tu ritmo.<br/>COP · Colombia</div></aside>
  <main className="content"><header className="top"><div><span className="eyebrow">TU DINERO, BAJO CONTROL</span><h1>{tabs.find(t=>t.id===tab)?.label}</h1></div><div className="top-actions"><button className="icon-button" aria-label="Cambiar tema" onClick={()=>setData(d=>({...d,dark:!d.dark}))}>{data.dark?<Sun size={19}/>:<Moon size={19}/>}</button><button className="primary" onClick={()=>startTx()}><Plus size={18}/> Nuevo movimiento</button></div></header>
