@@ -8,6 +8,7 @@ export type FinanceData = {
   categories: { id: string; name: string; color: string; budget: number }[];
   transactions: { id: string; date: string; type: 'expense' | 'income'; category: string; amount: number; title: string; note: string; recurringId?: string }[];
   fixed: { id: string; name: string; category: string; amount: number; day: number; active: boolean; start: string }[];
+  plannedIncomes?: { id: string; title: string; amount: number; date: string; note: string; actualTransactionId?: string }[];
 };
 export type AccountInfo = {
   userId: string;
