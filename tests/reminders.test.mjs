@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {dateDiffDays, selectReminders, describeDue} from '../scripts/reminder-core.mjs';
-const bill={id:'a',type:'expense',status:'pending',title:'Tarjeta Nu',amount:442128,date:'2026-12-01'};
+const bill={id:'a',type:'expense',status:'pending',dueDateConfirmed:true,title:'Tarjeta Nu',amount:442128,date:'2026-12-01'};
 test('future due dates use Colombia calendar days, not browser timezone',()=>{
  assert.equal(dateDiffDays('2026-12-01','2026-11-28'),3);
  assert.equal(dateDiffDays('2026-11-30','2026-12-01'),-1);
@@ -24,4 +24,10 @@ test('invalid, income and no due date never generates reminder',()=>{
  const payload={reminderSettings:{emailEnabled:true,daysBefore:1},transactions:[
   {...bill,type:'income'}, {...bill,date:'not-a-date'},{...bill,amount:0}]};
  assert.deepEqual(selectReminders(payload,'2026-11-30'),[]);
+});
+
+test('an estimated date without confirmed due date must never email',()=>{
+ const approximate={...bill,dueDateConfirmed:false};
+ const payload={reminderSettings:{emailEnabled:true,daysBefore:3},transactions:[approximate]};
+ assert.deepEqual(selectReminders(payload,'2026-11-28'),[]);
 });
