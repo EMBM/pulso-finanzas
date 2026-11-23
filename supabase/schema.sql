@@ -35,3 +35,19 @@ create policy "finance_update_own" on public.finance_data
 create policy "finance_delete_own" on public.finance_data
   for delete to authenticated
   using ((select auth.uid()) is not null and (select auth.uid()) = user_id);
+
+
+-- Registro privado para deduplicar los correos automáticos del scheduler.
+-- Las cuentas ordinarias jamás tienen acceso a esta tabla: solo la clave
+-- administrativa guardada en los secretos del proceso del servidor.
+create table if not exists public.reminder_deliveries (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  send_date date not null,
+  status text not null default 'sending' check (status in ('sending','sent')),
+  created_at timestamptz not null default now(),
+  sent_at timestamptz,
+  primary key (user_id, send_date)
+);
+alter table public.reminder_deliveries enable row level security;
+revoke all on public.reminder_deliveries from public, anon, authenticated;
+grant select, insert, update, delete on public.reminder_deliveries to service_role;
