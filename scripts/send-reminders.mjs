@@ -8,9 +8,11 @@ if (missing.length) {
   console.error('Recordatorios NO enviados: faltan secretos en GitHub Actions: ' + missing.join(', '));
   process.exit(1);
 }
-const today = new Intl.DateTimeFormat('en-CA', {
+const dateParts = new Intl.DateTimeFormat('es-CO', {
   timeZone:'America/Bogota', year:'numeric', month:'2-digit', day:'2-digit'
-}).format(new Date());
+}).formatToParts(new Date());
+const part = (key) => dateParts.find(p => p.type === key)?.value;
+const today = [part('year'),part('month'),part('day')].join('-');
 if (!/^\d{4}-\d{2}-\d{2}$/.test(today)) {
   throw new Error('No se pudo calcular la fecha colombiana para los recordatorios.');
 }
