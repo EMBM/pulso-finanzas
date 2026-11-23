@@ -9,7 +9,7 @@ type Kind = 'expense'|'income';
 type Transaction = {
  id:string;date:string;type:Kind;category:string;amount:number;title:string;note:string;
  recurringId?:string;status?:PaymentStatus;paidAt?:string;
- installmentNumber?:number;installmentsTotal?:number;remindDaysBefore?:number;
+ installmentNumber?:number;installmentsTotal?:number;dueDateConfirmed?:boolean;
 };
 type Category = {id:string;name:string;color:string;budget:number};
 type Fixed = {id:string;name:string;category:string;amount:number;day:number;active:boolean;start:string};
@@ -70,6 +70,7 @@ function FinanceDashboard({initialData,persistData,account}: {
  const [txStatus,setTxStatus]=useState<PaymentStatus>('pending');
  const [txInstallmentNumber,setTxInstallmentNumber]=useState('1');
  const [txInstallmentsTotal,setTxInstallmentsTotal]=useState('');
+ const [dueDateConfirmed,setDueDateConfirmed]=useState(false);
 
  const [fixedEdit,setFixedEdit]=useState<string|null>(null);
  const [fixedOpen,setFixedOpen]=useState(false);
@@ -96,8 +97,8 @@ function FinanceDashboard({initialData,persistData,account}: {
  const pending=rows.filter(t=>t.type==='expense'&&isPending(t)).reduce((s,t)=>s+t.amount,0);
  const outstandingCount=rows.filter(t=>t.type==='expense'&&isPending(t)).length;
  const pendingAll=data.transactions.filter(t=>t.type==='expense'&&isPending(t)).sort((a,b)=>a.date.localeCompare(b.date));
- const pendingOverdue=pendingAll.filter(t=>t.date<today());
- const pendingUpcoming=pendingAll.filter(t=>daysToDue(t.date,today())>=0&&daysToDue(t.date,today())<=7);
+ const pendingOverdue=pendingAll.filter(t=>t.dueDateConfirmed===true&&t.date<today());
+ const pendingUpcoming=pendingAll.filter(t=>t.dueDateConfirmed===true&&daysToDue(t.date,today())>=0&&daysToDue(t.date,today())<=7);
  const balance=income-spent;
  const balanceAfterBills=balance-pending;
  const forecastMonth=(data.plannedIncomes??[]).filter(p=>p.date.slice(0,7)===month).sort((a,b)=>a.date.localeCompare(b.date));
@@ -119,6 +120,7 @@ function FinanceDashboard({initialData,persistData,account}: {
   setCategory(t?.category||data.categories[0]?.id||'otros');setNote(t?.note||'');
   setTxStatus(t?(isPending(t)?'pending':'paid'):'pending');
   setTxInstallmentNumber(String(t?.installmentNumber||1));setTxInstallmentsTotal(t?.installmentsTotal?String(t.installmentsTotal):'');
+  setDueDateConfirmed(t?.dueDateConfirmed===true);
   setModal(true);
  };
  const saveTx=(e:FormEvent)=>{
@@ -129,7 +131,7 @@ function FinanceDashboard({initialData,persistData,account}: {
   const current=total?Math.max(1,n(txInstallmentNumber)):0;
   if(total>120||current>total){alert('El número de cuota debe estar entre 1 y el total (máximo 120).');return;}
   const t:Transaction={
-    id:edit||id(),title:title.trim(),amount:n(amount),date,type:kind,category,note,status,
+    id:edit||id(),title:title.trim(),amount:n(amount),date,type:kind,category,note,status,dueDateConfirmed:kind==='expense'&&dueDateConfirmed,
     ...(status==='paid'?{paidAt:previous?.paidAt||today()}:{ }),
     ...(previous?.recurringId?{recurringId:previous.recurringId}:{}),
     ...(total?{installmentNumber:current,installmentsTotal:total}:{}),
@@ -155,7 +157,7 @@ function FinanceDashboard({initialData,persistData,account}: {
   setData(d=>({...d,transactions:[...d.transactions,{
     id:id(),date:month+'-'+String(Math.min(f.day,max)).padStart(2,'0'),
     type:'expense',category:f.category,amount:f.amount,title:f.name,note:'Gasto fijo',
-    recurringId:f.id,status:'pending'
+    recurringId:f.id,status:'pending',dueDateConfirmed:false
   }]}));
 };
  const startForecast=(p?:PlannedIncome)=>{
@@ -270,7 +272,7 @@ function FinanceDashboard({initialData,persistData,account}: {
       <option value="1">1 día</option><option value="2">2 días</option><option value="3">3 días</option><option value="5">5 días</option><option value="7">7 días</option>
     </select>
   </label>
-  <p className="muted">Correo destinatario: {account?.email??'disponible después de iniciar sesión'}. Los avisos solo consideran obligaciones marcadas como pendientes.</p>
+  <p className="muted">Correo destinatario: {account?.email??'disponible después de iniciar sesión'}. Los avisos solo consideran obligaciones pendientes cuya fecha límite hayas confirmado.</p>
  </div><div className="card"><h2>Personalización</h2><label className="toggle"><input type="checkbox" checked={data.dark} onChange={e=>setData(d=>({...d,dark:e.target.checked}))}/> Modo oscuro</label><p className="muted">Moneda: peso colombiano (COP).</p></div></div>}
  </main><div className="mobile-nav">{tabs.map(t=><button aria-label={t.label} className={tab===t.id?'active':''} key={t.id} onClick={()=>setTab(t.id)}><t.icon size={19}/><span>{t.label}</span></button>)}</div>
  {modal&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setModal(false)}}><div className="dialog"><div className="card-head"><h2>{edit?'Editar movimiento':'Nuevo movimiento'}</h2><button className="icon-button" onClick={()=>setModal(false)}>✕</button></div><form onSubmit={saveTx} className="form"><div className="segmented"><button type="button" className={kind==='expense'?'selected':''} onClick={()=>setKind('expense')}>Gasto</button><button type="button" className={kind==='income'?'selected':''} onClick={()=>setKind('income')}>Ingreso extra</button></div><label>Descripción<input required maxLength={120} value={title} onChange={e=>setTitle(e.target.value)} placeholder="Ej. Mercado, almuerzo..."/></label><label>Valor COP<input required type="number" min="1" value={amount} onChange={e=>setAmount(e.target.value)}/></label><label>{kind==='expense'?'Fecha de vencimiento / prevista':'Fecha del ingreso'}<input required type="date" value={date} onChange={e=>setDate(e.target.value)}/></label>
@@ -279,7 +281,8 @@ function FinanceDashboard({initialData,persistData,account}: {
    <label>Total de cuotas (si aplica)<input type="number" min="1" max="120" placeholder="Ej. 6" value={txInstallmentsTotal} onChange={e=>setTxInstallmentsTotal(e.target.value)}/></label>
    {txInstallmentsTotal&&<label>Cuota actual<input type="number" min="1" max={Number(txInstallmentsTotal)||120} value={txInstallmentNumber} onChange={e=>setTxInstallmentNumber(e.target.value)}/></label>}
   </div>
-  <p className="muted">Para tarjetas con pagos mínimos no asumas un número fijo de cuotas. Deja el total vacío hasta conocer el plazo real.</p>
+  <label className="toggle"><input type="checkbox" checked={dueDateConfirmed} onChange={e=>setDueDateConfirmed(e.target.checked)}/> Esta es una fecha límite REAL confirmada (habilitar avisos)</label>
+  <p className="muted">Si la fecha solo es aproximada, deja la casilla desactivada; de lo contrario podrías recibir avisos equivocados. Para tarjetas con pagos mínimos no asumas cuotas fijas.</p>
  </>}<label>Categoría<select value={category} onChange={e=>setCategory(e.target.value)}>{data.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Nota (opcional)<input maxLength={500} value={note} onChange={e=>setNote(e.target.value)}/></label><div className="form-actions"><button className="ghost" type="button" onClick={()=>setModal(false)}>Cancelar</button><button className="primary" type="submit">Guardar movimiento</button></div></form></div></div>}
  {forecastOpen&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setForecastOpen(false)}}>
   <div className="dialog"><div className="card-head"><h2>{forecastEdit?'Editar ingreso previsto':'Nuevo ingreso previsto'}</h2><button className="icon-button" onClick={()=>setForecastOpen(false)}>✕</button></div>
@@ -306,7 +309,7 @@ function Transactions({rows,categoryName,startTx,removeTx,markPaid,markPending}:
  const current=today();
  return <div className="list">{rows.map(t=>{
   const pending=t.type==='expense'&&isPending(t);
-  const overdue=pending&&t.date<current;
+  const overdue=pending&&t.dueDateConfirmed===true&&t.date<current;
   return <div className="transaction" key={t.id}>
     <div className="avatar">{t.type==='income'?'↗':pending?'🕒':'↙'}</div>
     <div className="transaction-info">
@@ -316,7 +319,7 @@ function Transactions({rows,categoryName,startTx,removeTx,markPaid,markPending}:
         {t.installmentsTotal?' · Cuota '+(t.installmentNumber??1)+'/'+t.installmentsTotal:''}
       </small>
       <small className={overdue?'due-overdue':'muted'}>
-        {pending?dueDescription(t.date,current):'Pagado'+(t.paidAt?' el '+t.paidAt:'')}
+        {pending?(t.dueDateConfirmed===true?dueDescription(t.date,current):'Fecha estimada · confirma vencimiento'):'Pagado'+(t.paidAt?' el '+t.paidAt:'')}
       </small>
     </div>
     <div className="bill-amount"><strong className={t.type==='income'?'positive':pending?'':'negative'}>{t.type==='income'?'+':pending?'':'−'}{money(t.amount)}</strong>
